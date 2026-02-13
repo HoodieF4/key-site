@@ -14,8 +14,12 @@ function generateKey() {
   return crypto.randomBytes(16).toString("hex").toUpperCase();
 }
 
-function hashKey(key) {
-  return crypto.createHash("sha256").update(key).digest("hex");
+function hashKey(value) {
+  return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+function randomToken() {
+  return crypto.randomBytes(24).toString("hex");
 }
 
 /* ---------------- DB ---------------- */
@@ -30,34 +34,48 @@ db.serialize(() => {
       used_by TEXT
     )
   `);
+
+  // One-time tokens to display the key page only once
+  db.run(`
+    CREATE TABLE IF NOT EXISTS page_tokens (
+      token_hash TEXT PRIMARY KEY,
+      key_plain TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER
+    )
+  `);
 });
 
-/* ---------------- Routes ---------------- */
+/* ---------------- UI helpers ---------------- */
 
-app.get("/", (req, res) => {
-  res.type("text/plain").send("OK - Key Site is running ✅");
-});
+function renderNeedNewKeyPage() {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Generate a New Key</title>
+  <style>
+    body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:#0b0b12;color:#fff;min-height:100vh;display:grid;place-items:center;}
+    .card{max-width:640px;width:92vw;border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:22px;background:rgba(255,255,255,.06);}
+    h2{margin:0 0 8px;}
+    p{margin:8px 0;opacity:.8;line-height:1.4}
+    .tip{opacity:.65;font-size:13px;margin-top:14px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🔒 No valid key page</h2>
+    <p>You must generate a new key by completing the tasks.</p>
+    <p>Go back to Discord and click <b>Generate Key</b>.</p>
+    <div class="tip">This page can only show a key once. Reloading or sharing the link won’t work.</div>
+  </div>
+</body>
+</html>`;
+}
 
-/**
- * Lockr should redirect here after tasks completion.
- * This generates a key and shows a nice page.
- */
-app.get("/done", (req, res) => {
-  const key = generateKey();
-  const now = Date.now();
-  const expiresAt = now + 10 * 60 * 1000; // 10 minutes
-
-  db.run(
-    `INSERT INTO keys (key_hash, created_at, expires_at) VALUES (?, ?, ?)`,
-    [hashKey(key), now, expiresAt],
-    (err) => {
-      if (err) return res.status(500).type("text/plain").send("Error generating key.");
-
-      // ✅ Change these:
-      const SERVER_NAME = "FROST🔞| Best Free Daily Packs 💦";
-      const ICON_URL = "https://cdn.discordapp.com/attachments/1146456316290797678/1471717239920001095/Sfff44a1e8b564fadac807ad15eb2948dA.webp?ex=698ff2fd&is=698ea17d&hm=973b7c56c336d83edbc8a69434b415c00184381fa6eb6c8ea0e924b045b46122&";
-
-      return res.status(200).type("text/html").send(`<!doctype html>
+function renderKeyPage({ key, serverName, iconUrl }) {
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -67,7 +85,6 @@ app.get("/done", (req, res) => {
     :root{
       --bg1:#0b0b12;
       --bg2:#2a0d3f;
-      --bg3:#ff4fd8;
       --card: rgba(255,255,255,.10);
       --stroke: rgba(255,255,255,.18);
       --text: rgba(255,255,255,.92);
@@ -115,26 +132,18 @@ app.get("/done", (req, res) => {
       opacity:.75;
       pointer-events:none;
     }
-    .top{
-      position:relative;
-      display:flex;
-      align-items:center;
-      gap:14px;
-      margin-bottom:14px;
-    }
+    .top{ position:relative; display:flex; align-items:center; gap:14px; margin-bottom:14px; }
     .icon{
-      width:64px; height:64px;
-      border-radius:18px;
+      width:64px; height:64px; border-radius:18px;
       border:1px solid rgba(255,255,255,.22);
       background: rgba(0,0,0,.25);
-      overflow:hidden;
-      flex:0 0 auto;
+      overflow:hidden; flex:0 0 auto;
       box-shadow: 0 12px 35px rgba(0,0,0,.35);
     }
     .icon img{width:100%;height:100%;object-fit:cover;display:block}
-    .title{ line-height:1.1; }
     .title h1{ font-size:20px; margin:0; letter-spacing:.2px; }
     .title p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
+
     .keyBox{
       position:relative;
       margin-top:16px;
@@ -145,47 +154,28 @@ app.get("/done", (req, res) => {
     }
     .keyLabel{ font-size:12px; color:var(--muted); margin-bottom:10px; }
     .keyValue{
-      font-size:20px;
-      letter-spacing:1px;
-      word-break:break-all;
-      padding:12px 14px;
-      border-radius:14px;
+      font-size:20px; letter-spacing:1px; word-break:break-all;
+      padding:12px 14px; border-radius:14px;
       background: rgba(255,255,255,.06);
       border:1px solid rgba(255,255,255,.12);
-      cursor:pointer;
-      user-select:none;
-      transition: transform .08s ease, background .2s ease;
+      cursor:pointer; user-select:none;
     }
-    .keyValue:hover{ background: rgba(255,255,255,.10); }
-    .keyValue:active{ transform: scale(.99); }
     .actions{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
     .btn{
-      border:0;
-      cursor:pointer;
-      border-radius:14px;
-      padding:10px 14px;
-      font-weight:600;
-      color:#0b0b12;
+      border:0; cursor:pointer; border-radius:14px;
+      padding:10px 14px; font-weight:600; color:#0b0b12;
       background: linear-gradient(135deg, rgba(255,255,255,.95), rgba(255,255,255,.75));
       box-shadow: 0 10px 30px rgba(0,0,0,.25);
-      transition: transform .08s ease, opacity .2s ease;
     }
-    .btn:hover{ opacity:.95; }
-    .btn:active{ transform: scale(.99); }
-    .hint{ margin-top:14px; font-size:13px; color:var(--muted); line-height:1.4; }
     .toast{ margin-top:10px; font-size:13px; color: rgba(255,255,255,.88); min-height:18px; }
     .pill{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      font-size:12px;
-      color: rgba(255,255,255,.78);
+      display:inline-flex; align-items:center; gap:8px;
+      font-size:12px; color: rgba(255,255,255,.78);
       border: 1px solid rgba(255,255,255,.16);
       background: rgba(255,255,255,.06);
-      padding:7px 10px;
-      border-radius:999px;
-      margin-top:12px;
+      padding:7px 10px; border-radius:999px; margin-top:12px;
     }
+    .hint{ margin-top:14px; font-size:13px; color:var(--muted); line-height:1.4; }
   </style>
 </head>
 <body>
@@ -196,11 +186,11 @@ app.get("/done", (req, res) => {
 
       <div class="top">
         <div class="icon">
-          <img src="${ICON_URL}" alt="Server icon" onerror="this.style.display='none'">
+          <img src="${iconUrl}" alt="Server icon" onerror="this.style.display='none'">
         </div>
         <div class="title">
           <h1>✅ Key Generated</h1>
-          <p>Use this key in Discord with <b>/redeem</b> to get 1-hour access.</p>
+          <p>Copy this key and redeem it in Discord using <b>/redeem</b>.</p>
         </div>
       </div>
 
@@ -214,11 +204,11 @@ app.get("/done", (req, res) => {
 
         <div class="toast" id="toast"></div>
 
-        <div class="pill">⏳ Expires in 10 minutes • ${SERVER_NAME}</div>
+        <div class="pill">⏳ Expires in 10 minutes • ${serverName}</div>
       </div>
 
       <div class="hint">
-        If your key expires, complete the tasks again to generate a new one.
+        This page is <b>one-time</b>. If you reload or share the link, you must generate a new key.
       </div>
     </div>
   </div>
@@ -230,7 +220,7 @@ app.get("/done", (req, res) => {
     const text = el.innerText.trim();
 
     navigator.clipboard.writeText(text).then(() => {
-      toast.textContent = "✅ Copied! Now go back to Discord and run /redeem";
+      toast.textContent = "✅ Copied! Go back to Discord and run /redeem";
       setTimeout(() => toast.textContent = "", 3500);
     }).catch(() => {
       toast.textContent = "⚠️ Could not copy automatically. Please copy it manually.";
@@ -239,16 +229,88 @@ app.get("/done", (req, res) => {
   }
 </script>
 </body>
-</html>`);
+</html>`;
+}
+
+/* ---------------- Routes ---------------- */
+
+app.get("/", (req, res) => {
+  // Optional: keep this as plain text or redirect to /done
+  res.type("text/plain").send("OK - Key Site is running ✅");
+});
+
+/**
+ * Lockr success redirect should point here:
+ * /unlock?s=YOUR_SECRET
+ */
+app.get("/unlock", (req, res) => {
+  const secret = String(req.query?.s || "").trim();
+  const expected = String(process.env.LOCKR_SECRET || "").trim();
+
+  if (!expected || secret !== expected) {
+    return res.status(403).type("text/html").send(renderNeedNewKeyPage());
+  }
+
+  const key = generateKey();
+  const now = Date.now();
+  const keyExpiresAt = now + 10 * 60 * 1000; // redeem window
+
+  db.run(
+    `INSERT INTO keys (key_hash, created_at, expires_at) VALUES (?, ?, ?)`,
+    [hashKey(key), now, keyExpiresAt],
+    (err) => {
+      if (err) return res.status(500).type("text/plain").send("Error generating key.");
+
+      const pageToken = randomToken();
+      const pageTokenExpiresAt = now + 2 * 60 * 1000; // 2 min to view the page once
+
+      db.run(
+        `INSERT INTO page_tokens (token_hash, key_plain, expires_at, used_at)
+         VALUES (?, ?, ?, NULL)`,
+        [hashKey(pageToken), key, pageTokenExpiresAt],
+        (err2) => {
+          if (err2) return res.status(500).type("text/plain").send("Error creating token.");
+
+          return res.redirect(`/done?t=${pageToken}`);
+        }
+      );
     }
   );
+});
+
+/**
+ * Shows key only ONCE. Reload/sharing will not work.
+ */
+app.get("/done", (req, res) => {
+  const t = String(req.query?.t || "").trim();
+  if (!t) return res.status(200).type("text/html").send(renderNeedNewKeyPage());
+
+  const now = Date.now();
+  const tHash = hashKey(t);
+
+  db.get(`SELECT * FROM page_tokens WHERE token_hash = ?`, [tHash], (err, row) => {
+    if (err || !row) return res.status(200).type("text/html").send(renderNeedNewKeyPage());
+    if (row.used_at) return res.status(200).type("text/html").send(renderNeedNewKeyPage());
+    if (row.expires_at < now) return res.status(200).type("text/html").send(renderNeedNewKeyPage());
+
+    // Mark token as used immediately (prevents refresh / sharing)
+    db.run(`UPDATE page_tokens SET used_at = ? WHERE token_hash = ?`, [now, tHash]);
+
+    // ✅ Customize these:
+    const SERVER_NAME = "YOUR SERVER";
+    const ICON_URL = "https://cdn.discordapp.com/icons/YOUR_GUILD_ID/YOUR_ICON.png?size=256";
+
+    return res.status(200).type("text/html").send(
+      renderKeyPage({ key: row.key_plain, serverName: SERVER_NAME, iconUrl: ICON_URL })
+    );
+  });
 });
 
 /**
  * Bot calls this endpoint to redeem a key
  */
 app.post("/api/redeem", (req, res) => {
-  const key = (req.body?.key || "").trim();
+  const key = String(req.body?.key || "").trim();
   const userId = String(req.body?.userId || "").trim();
 
   if (!key || !userId) {
