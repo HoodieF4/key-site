@@ -5,22 +5,22 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// Render usa PORT automaticamente
+// Render provides PORT automatically
 const PORT = process.env.PORT || 3000;
 
-// DB local (para já). No Render free isto pode resetar quando redeploy.
-// Para começar e testar, serve.
+// Local database (for testing)
 const db = new sqlite3.Database("./keys.db");
 
-// --- Helpers
-function makeKey() {
-  // 32 chars, fácil de copiar
+// ---------------- HELPERS ----------------
+function generateKey() {
   return crypto.randomBytes(16).toString("hex").toUpperCase();
 }
-function hashKey(k) {
-  return crypto.createHash("sha256").update(k).digest("hex");
+
+function hashKey(key) {
+  return crypto.createHash("sha256").update(key).digest("hex");
 }
 
+// ---------------- DATABASE ----------------
 db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS keys (
@@ -33,61 +33,80 @@ db.serialize(() => {
   `);
 });
 
-// Healthcheck
-app.get("/", (req, res) => res.send("OK - key site is running ✅"));
+// ---------------- ROUTES ----------------
 
-// ✅ Lockr redireciona para aqui quando o user completa tarefas
+// Health check
+app.get("/", (req, res) => {
+  res.send("✅ Key Site is running!");
+});
+
+// ✅ Lockr redirects here after tasks completion
 app.get("/done", (req, res) => {
-  const key = makeKey();
+  const key = generateKey();
   const now = Date.now();
-  const expiresAt = now + 10 * 60 * 1000; // key válida por 10 min
+  const expiresAt = now + 10 * 60 * 1000; // 10 minutes
 
   db.run(
     `INSERT INTO keys (key_hash, created_at, expires_at, used_at, used_by)
      VALUES (?, ?, ?, NULL, NULL)`,
     [hashKey(key), now, expiresAt],
     (err) => {
-      if (err) return res.status(500).send("Erro ao gerar key.");
+      if (err) return res.status(500).send("Error generating key.");
 
-      res.setHeader("Content-Type", "text/html");
       res.send(`
 <!doctype html>
 <html>
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Key Gerada</title>
+  <title>Your Key</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
 </head>
-<body style="margin:0; font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial; background:#0b0b10; color:#fff;">
-  <div style="max-width:720px; margin:0 auto; padding:28px;">
-    <h2 style="margin:0 0 10px;">✅ Key gerada com sucesso</h2>
-    <p style="opacity:.85; line-height:1.4;">
-      Copia a key abaixo e volta ao Discord para usar o comando <b>/redeem</b>.
-      <br/>⏳ Esta key expira em <b>10 minutos</b>.
+
+<body style="margin:0;font-family:Arial;background:#0b0b10;color:white;">
+  <div style="max-width:720px;margin:auto;padding:30px;">
+
+    <h2>✅ Key Generated Successfully</h2>
+
+    <p style="opacity:0.8;">
+      Copy this key and redeem it in Discord using <b>/redeem</b>.
+      <br>
+      ⏳ This key expires in <b>10 minutes</b>.
     </p>
 
-    <div style="margin:18px 0; padding:16px; border:1px solid #2a2a3a; border-radius:14px; background:#12121a;">
-      <div style="font-size:14px; opacity:.75; margin-bottom:8px;">Tua key:</div>
-      <div id="k" style="font-size:22px; letter-spacing:1px; word-break:break-all;">${key}</div>
-      <button onclick="copyKey()" style="margin-top:14px; padding:10px 14px; border-radius:10px; border:0; cursor:pointer;">
-        Copiar key
+    <div style="padding:16px;border:1px solid #333;border-radius:12px;background:#15151f;">
+      <h3 style="margin:0;">Your Key:</h3>
+
+      <div id="keyBox"
+        style="margin-top:10px;font-size:22px;letter-spacing:1px;word-break:break-all;">
+        ${key}
+      </div>
+
+      <button onclick="copyKey()"
+        style="margin-top:15px;padding:10px 15px;border-radius:10px;border:none;cursor:pointer;">
+        Copy Key
       </button>
-      <div id="msg" style="margin-top:10px; opacity:.8;"></div>
+
+      <p id="msg" style="margin-top:10px;opacity:0.7;"></p>
     </div>
 
-    <p style="opacity:.65;">Se expirar, volta a completar as tarefas para gerar outra.</p>
+    <p style="margin-top:20px;opacity:0.6;">
+      If your key expires, complete the tasks again to generate a new one.
+    </p>
+
   </div>
 
 <script>
-function copyKey(){
-  const text = document.getElementById("k").innerText;
-  navigator.clipboard.writeText(text).then(()=>{
-    document.getElementById("msg").innerText = "✅ Copiada!";
-  }).catch(()=>{
-    document.getElementById("msg").innerText = "⚠️ Não deu para copiar automaticamente. Copia manualmente.";
+function copyKey() {
+  const text = document.getElementById("keyBox").innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById("msg").innerText = "✅ Key copied!";
+  }).catch(() => {
+    document.getElementById("msg").innerText =
+      "⚠️ Could not copy automatically. Please copy manually.";
   });
 }
 </script>
+
 </body>
 </html>
       `);
@@ -95,29 +114,15 @@ function copyKey(){
   );
 });
 
-// ✅ Endpoint para o BOT validar e resgatar key
+// ✅ Bot calls this endpoint to redeem a key
 app.post("/api/redeem", (req, res) => {
-  const { key, userId } = req.body || {};
-  if (!key || !userId) return res.status(400).json({ ok: false, error: "missing_key_or_user" });
+  const { key, userId } = req.body;
+
+  if (!key || !userId) {
+    return res.status(400).json({ ok: false, error: "missing_data" });
+  }
 
   const now = Date.now();
-  const keyHash = hashKey(String(key).trim());
+  const keyHash = hashKey(key.trim());
 
-  db.get(`SELECT * FROM keys WHERE key_hash = ?`, [keyHash], (err, row) => {
-    if (err) return res.status(500).json({ ok: false, error: "db_error" });
-    if (!row) return res.status(404).json({ ok: false, error: "invalid" });
-    if (row.used_at) return res.status(409).json({ ok: false, error: "already_used" });
-    if (row.expires_at < now) return res.status(410).json({ ok: false, error: "expired" });
-
-    db.run(
-      `UPDATE keys SET used_at = ?, used_by = ? WHERE key_hash = ?`,
-      [now, String(userId), keyHash],
-      (e2) => {
-        if (e2) return res.status(500).json({ ok: false, error: "db_error" });
-        return res.json({ ok: true });
-      }
-    );
-  });
-});
-
-app.listen(PORT, () => console.log("✅ key-site running on port", PORT));
+  db.get(`SELECT * FROM keys WHERE key_hash = ?`, [keyHash], (err,_*
