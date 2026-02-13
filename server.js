@@ -38,8 +38,10 @@ app.get("/", (req, res) => {
   res.type("text/plain").send("OK - Key Site is running ✅");
 });
 
-// Lockr should redirect here after tasks completion.
-// This returns a simple page with the key (no big HTML template).
+/**
+ * Lockr should redirect here after tasks completion.
+ * This generates a key and shows a nice page.
+ */
 app.get("/done", (req, res) => {
   const key = generateKey();
   const now = Date.now();
@@ -51,27 +53,11 @@ app.get("/done", (req, res) => {
     (err) => {
       if (err) return res.status(500).type("text/plain").send("Error generating key.");
 
-      // Minimal HTML (safe, no template backticks)
-      res
-        .status(200)
-        .type("text/html")
-        .send(
-          // Lockr redirect page
-app.get("/done", (req, res) => {
-  const key = generateKey();
-  const now = Date.now();
-  const expiresAt = now + 10 * 60 * 1000; // 10 minutes
-
-  db.run(
-    `INSERT INTO keys (key_hash, created_at, expires_at) VALUES (?, ?, ?)`,
-    [hashKey(key), now, expiresAt],
-    (err) => {
-      if (err) return res.status(500).type("text/plain").send("Error generating key.");
-
+      // ✅ Change these:
       const SERVER_NAME = "YOUR SERVER";
       const ICON_URL = "https://cdn.discordapp.com/icons/YOUR_GUILD_ID/YOUR_ICON.png?size=256";
 
-      res.status(200).type("text/html").send(`<!doctype html>
+      return res.status(200).type("text/html").send(`<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -110,10 +96,7 @@ app.get("/done", (req, res) => {
       pointer-events:none;
       mix-blend-mode:overlay;
     }
-    .wrap{
-      width:min(680px, 92vw);
-      padding:18px;
-    }
+    .wrap{ width:min(680px, 92vw); padding:18px; }
     .card{
       position:relative;
       border:1px solid var(--stroke);
@@ -149,19 +132,9 @@ app.get("/done", (req, res) => {
       box-shadow: 0 12px 35px rgba(0,0,0,.35);
     }
     .icon img{width:100%;height:100%;object-fit:cover;display:block}
-    .title{
-      line-height:1.1;
-    }
-    .title h1{
-      font-size:20px;
-      margin:0;
-      letter-spacing:.2px;
-    }
-    .title p{
-      margin:6px 0 0;
-      color:var(--muted);
-      font-size:13px;
-    }
+    .title{ line-height:1.1; }
+    .title h1{ font-size:20px; margin:0; letter-spacing:.2px; }
+    .title p{ margin:6px 0 0; color:var(--muted); font-size:13px; }
     .keyBox{
       position:relative;
       margin-top:16px;
@@ -170,11 +143,7 @@ app.get("/done", (req, res) => {
       border-radius:16px;
       padding:16px;
     }
-    .keyLabel{
-      font-size:12px;
-      color:var(--muted);
-      margin-bottom:10px;
-    }
+    .keyLabel{ font-size:12px; color:var(--muted); margin-bottom:10px; }
     .keyValue{
       font-size:20px;
       letter-spacing:1px;
@@ -189,12 +158,7 @@ app.get("/done", (req, res) => {
     }
     .keyValue:hover{ background: rgba(255,255,255,.10); }
     .keyValue:active{ transform: scale(.99); }
-    .actions{
-      display:flex;
-      gap:10px;
-      margin-top:12px;
-      flex-wrap:wrap;
-    }
+    .actions{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
     .btn{
       border:0;
       cursor:pointer;
@@ -208,18 +172,8 @@ app.get("/done", (req, res) => {
     }
     .btn:hover{ opacity:.95; }
     .btn:active{ transform: scale(.99); }
-    .hint{
-      margin-top:14px;
-      font-size:13px;
-      color:var(--muted);
-      line-height:1.4;
-    }
-    .toast{
-      margin-top:10px;
-      font-size:13px;
-      color: rgba(255,255,255,.88);
-      min-height:18px;
-    }
+    .hint{ margin-top:14px; font-size:13px; color:var(--muted); line-height:1.4; }
+    .toast{ margin-top:10px; font-size:13px; color: rgba(255,255,255,.88); min-height:18px; }
     .pill{
       display:inline-flex;
       align-items:center;
@@ -290,12 +244,9 @@ app.get("/done", (req, res) => {
   );
 });
 
-        );
-    }
-  );
-});
-
-// Bot calls this to redeem a key
+/**
+ * Bot calls this endpoint to redeem a key
+ */
 app.post("/api/redeem", (req, res) => {
   const key = (req.body?.key || "").trim();
   const userId = String(req.body?.userId || "").trim();
