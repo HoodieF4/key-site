@@ -54,8 +54,8 @@ app.get("/done", (req, res) => {
       if (err) return res.status(500).type("text/plain").send("Error generating key.");
 
       // ✅ Change these:
-      const SERVER_NAME = "YOUR SERVER";
-      const ICON_URL = "https://cdn.discordapp.com/icons/YOUR_GUILD_ID/YOUR_ICON.png?size=256";
+      const SERVER_NAME = "FROST🔞| Best Free Daily Packs 💦";
+      const ICON_URL = "https://cdn.discordapp.com/attachments/1146456316290797678/1471717239920001095/Sfff44a1e8b564fadac807ad15eb2948dA.webp?ex=698ff2fd&is=698ea17d&hm=973b7c56c336d83edbc8a69434b415c00184381fa6eb6c8ea0e924b045b46122&";
 
       return res.status(200).type("text/html").send(`<!doctype html>
 <html lang="en">
