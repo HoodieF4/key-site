@@ -11,7 +11,8 @@ const db = new sqlite3.Database("./keys.db");
 /* ---------------- Helpers ---------------- */
 
 function generateKey() {
-  return crypto.randomBytes(16).toString("hex").toUpperCase();
+  const raw = crypto.randomBytes(8).toString("hex").toUpperCase();
+  return `FK-${raw.match(/.{1,4}/g).join("-")}`;
 }
 
 function hashKey(value) {
