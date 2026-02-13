@@ -297,8 +297,8 @@ app.get("/done", (req, res) => {
     db.run(`UPDATE page_tokens SET used_at = ? WHERE token_hash = ?`, [now, tHash]);
 
     // ✅ Customize these:
-    const SERVER_NAME = "YOUR SERVER";
-    const ICON_URL = "https://cdn.discordapp.com/icons/YOUR_GUILD_ID/YOUR_ICON.png?size=256";
+    const SERVER_NAME = "FROST🔞| Best Free Daily Packs 💦";
+    const ICON_URL = "https://media.discordapp.net/attachments/1146456316290797678/1471717239920001095/Sfff44a1e8b564fadac807ad15eb2948dA.webp?ex=698ff2fd&is=698ea17d&hm=973b7c56c336d83edbc8a69434b415c00184381fa6eb6c8ea0e924b045b46122&=&format=webp&width=1511&height=1511";
 
     return res.status(200).type("text/html").send(
       renderKeyPage({ key: row.key_plain, serverName: SERVER_NAME, iconUrl: ICON_URL })
